@@ -1,0 +1,25 @@
+name: predict-future-sales
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12
+  - pip
+  - typer
+  - loguru
+  - tqdm
+  - ipython
+  - jupyterlab
+  - matplotlib
+  - notebook
+  - numpy
+  - libblas=*=*openblas  # evita fallo de DLLs de MKL en Windows cuando el kernel no activa el entorno
+  - pandas
+  - scikit-learn
+  - seaborn
+  - statsmodels
+  - ipykernel
+  - nbconvert
+  - ruff
+  - pip:
+    - python-dotenv
+    - -e .
