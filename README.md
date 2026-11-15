@@ -237,5 +237,5 @@ Estructura generada con la plantilla **Cookiecutter Data Science v2** (`ccds`):
 | Integrante | Usuario GitHub |
 |------------|----------------|
 | César García | [@cesargp45](https://github.com/cesargp45) |
-| Sergio Ruano | _(pendiente)_ |
-| Dorotthy Estrada | _(pendiente)_ |
+| Sergio Ruano | [@25002706-cloud](https://github.com/25002706-cloud) |
+| Dorotthy Estrada | [@dorotthyestrada](https://github.com/dorotthyestrada) |
