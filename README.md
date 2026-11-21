@@ -1,24 +1,29 @@
-# Predict Future Sales — Exploratory Data Analysis (EDA)
+# Predict Future Sales — EDA y Pipeline de Machine Learning
 
 <a target="_blank" href="https://cookiecutter-data-science.drivendata.org/">
     <img src="https://img.shields.io/badge/CCDS-Project%20template-328F97?logo=cookiecutter" />
 </a>
 
-Proyecto #1 del curso **Product Development** (Maestría). Análisis exploratorio del dataset
+Proyectos #1 y #2 del curso **Product Development** (Maestría) sobre el dataset
 [Predict Future Sales](https://www.kaggle.com/competitions/competitive-data-science-predict-future-sales/data)
 de Kaggle: ventas diarias de la cadena rusa de tiendas **1C Company** (enero 2013 – octubre 2015).
 
-El objetivo final de la competencia es **predecir las ventas mensuales (`item_cnt_month`) de cada
-par tienda–producto para noviembre de 2015**. Este EDA prepara el terreno para esa etapa de
-*forecasting*: entender la estructura de los datos, su calidad, sus patrones temporales y qué
-información existe (o no) para los pares que hay que predecir.
+El objetivo de la competencia es **predecir las ventas mensuales (`item_cnt_month`) de cada par
+tienda–producto para noviembre de 2015** (`date_block_num = 34`), evaluado con **RMSE**.
+
+| Fase | Contenido | Notebooks |
+|---|---|---|
+| **Proyecto #1 – EDA** | Estructura, calidad, patrones temporales, ACF/PACF y cobertura del test | `01` |
+| **Proyecto #2 – Pipeline ML** | Ingeniería de características, pipeline de sklearn, torneo de 15 modelos e inferencia sobre `test.csv` | `02` a `05` |
 
 > **Uso de IA:** este proyecto se desarrolló con apoyo de Claude Code dentro de VSCode, tal como lo
 > permite el enunciado.
 
 ---
 
-## Contenido del análisis
+## Proyecto #1 — Análisis exploratorio (EDA)
+
+### Contenido del análisis
 
 El notebook [`notebooks/01_exploratory_data_analysis.ipynb`](notebooks/01_exploratory_data_analysis.ipynb)
 cubre los puntos del enunciado:
@@ -35,7 +40,7 @@ cubre los puntos del enunciado:
 | 9 | ACF / PACF | Serie total (mensual y diaria), por tienda, por producto y por tienda–producto |
 | 10 | Insights y conclusiones | Variables relevantes, patrones para forecasting, cobertura de `test.csv` en el train, calidad del dataset |
 
-## Resultados principales
+### Resultados principales del EDA
 
 ![Ventas totales mensuales](reports/figures/08a_serie_ventas_totales.png)
 
@@ -74,6 +79,97 @@ cubre los puntos del enunciado:
 
 Solo el 13.4% de los pares de test vendió algo en octubre 2015: la mayoría de las predicciones
 estarán cerca de 0.
+
+---
+
+## Proyecto #2 — Pipeline de Machine Learning
+
+### Notebooks
+
+| Notebook | Contenido | Salida |
+|---|---|---|
+| [`02_feature_exploration.ipynb`](notebooks/02_feature_exploration.ipynb) | Grid mensual con ceros, selección de *lags* (correlación + prueba empírica), los 6 procesos de ingeniería de características con su criterio, lista final de variables y mapeos | Proceso escrito (sección 4) |
+| [`03_feature_creation.ipynb`](notebooks/03_feature_creation.ipynb) | `Pipeline` de sklearn con los 14 pasos, validación (sin NaN, sin fuga de información) | `models/preprocessing_pipeline.pkl` |
+| [`04_model_training_n_tunning.ipynb`](notebooks/04_model_training_n_tunning.ipynb) | 5 familias × 3 configuraciones = 15 modelos, validación secuencial, RMSE, análisis del ganador | `models/full_pipeline.pkl` |
+| [`05_inference_calculation.ipynb`](notebooks/05_inference_calculation.ipynb) | Inferencia sobre `test.csv` crudo con el pipeline completo, validación del formato | `data/processed/submission.csv` |
+
+### Enfoque: forecasting global con variables exógenas
+
+En lugar de una serie de tiempo por cada par (más de 400 mil series casi vacías) se entrena un
+**modelo global sobre rezagos** (tipo *ARX*). Cada fila es *(mes, tienda, producto)*:
+
+- **Parte autorregresiva**: ventas del propio par en los meses `m−1, m−2, m−3, m−6, m−12`.
+- **Tienda y producto como variables exógenas**: códigos de tienda y categoría, ciudad, tipo de
+  tienda, grupo de categoría, historia agregada del producto, de la categoría, de la tienda y de
+  tienda × categoría, precio, y **banderas** `item_is_new` / `pair_is_new` con su antigüedad.
+  Esto permite pronosticar el 48% de los pares de `test.csv` que no tienen historia propia.
+- **Dataset**: grid mensual tienda × producto activos con ceros en los meses sin ventas
+  (10.9 millones de filas, 85% en cero), objetivo recortado a [0, 20].
+- **Validación secuencial** (no aleatoria), como pide el enunciado: entrenamiento meses 0–26,
+  validación meses 27–33.
+- **Sin fuga de información**: cada lag usa solo meses anteriores al mes de la fila (para el mes 34,
+  los meses 33, 32, 31…). Se verificó con pruebas automáticas en los notebooks 02 y 03.
+
+### Pipeline de preprocesamiento (14 pasos)
+
+El pipeline recibe **datos crudos** (`date_block_num, shop_id, item_id`, lo mismo que trae
+`test.csv`) y genera las 40 variables del modelo. Los transformadores propios están en
+[`predict_future_sales/features.py`](predict_future_sales/features.py).
+
+| # | Paso | Operador | Proceso del enunciado |
+|---|---|---|---|
+| 1 | `history` | `SalesHistoryFeatures` (propio) | lags (par, producto, categoría, tienda, tienda × categoría), precio, antigüedad, banderas, calendario |
+| 2–4 | `map_*` | `Mapper` (propio, interfaz del visto en clase) | `shop_id → city`, `shop_id → shop_type`, `item_category_id → category_group` |
+| 5 | `drop_keys` | `DropFeatures` | elimina `date_block_num` e `item_id` |
+| 6–7 | `missing_indicator`, `num_imputer` | `AddMissingIndicator`, `MeanMedianImputer(median)` | **i. imputación numérica** |
+| 8 | `cat_imputer` | `CategoricalImputer("Missing")` | **ii. imputación categórica** |
+| 9–10 | `onehot`, `mean_encoder` | `OneHotEncoder`, `MeanEncoder` | **iii. codificación** |
+| 11 | `outliers` | `Winsorizer` (percentil 99) | **iv. outliers** |
+| 12 | `log` | `LogCpTransformer` (`log(x+1)`) | **v. transformación** |
+| 13 | `scaler` | `StandardScaler` | **vi. escalado** |
+| 14 | `float32` | `DtypeDowncaster` (propio) | reduce memoria a la mitad |
+
+### Resultados del torneo (RMSE de validación, meses 27–33)
+
+| Familia | Mejor configuración | RMSE validación |
+|---|---|---|
+| **Random Forest** 🏆 | `n_estimators=50, max_depth=14, min_samples_leaf=20` | **0.8096** |
+| LightGBM | `n_estimators=300, num_leaves=31, learning_rate=0.1` | 0.8130 |
+| XGBoost | `n_estimators=300, max_depth=6, learning_rate=0.1` | 0.8184 |
+| Árbol de decisión | `max_depth=16, min_samples_leaf=200` | 0.8453 |
+| Ridge | `alpha=1000` | 0.9091 |
+| *Referencia ingenua* | repetir el mes anterior (lag 1) | *1.0373* |
+
+![Torneo de modelos](reports/figures/p2_04a_torneo_modelos.png)
+
+- El ganador mejora en **22%** al pronóstico ingenuo. Las 15 configuraciones están en
+  [`reports/model_tournament_results.csv`](reports/model_tournament_results.csv) y el resumen del
+  ganador en [`reports/best_model.json`](reports/best_model.json).
+- Importancia de variables del ganador: historia propia del par 50%, **producto/categoría 32%,
+  tienda 16%** (exógenas), calendario 2%.
+- El pipeline completo se re-entrenó con los meses 0–33 antes de predecir noviembre 2015.
+
+### Predicciones (`test.csv`, noviembre 2015)
+
+- `data/processed/submission.csv`: 214,200 filas con `ID, item_cnt_month`, mismo formato que
+  `sample_submission.csv`, valores en [0, 20].
+- Media predicha 0.30 unidades por par. Total 64,156 unidades, frente a 54,760 reales de los
+  mismos pares en octubre 2015; la diferencia la aportan sobre todo los productos nuevos.
+- Correlación de 0.998 entre el total real de octubre y el total predicho por tienda.
+
+### Artefactos generados
+
+| Archivo | Descripción |
+|---|---|
+| `models/preprocessing_pipeline.pkl` | Pipeline de ingeniería de características ajustado (meses 0–26), 18 MB |
+| `models/full_pipeline.pkl` | Preprocesamiento + Random Forest ganador re-entrenado con meses 0–33, 25 MB |
+| `data/processed/submission.csv` | Predicciones de `test.csv` en formato Kaggle |
+| `reports/model_tournament_results.csv` | Tabla de los 15 modelos (RMSE entrenamiento y validación, tiempos) |
+| `reports/best_model.json` | Modelo ganador e hiperparámetros |
+
+> Los `.pkl` se cargan con `joblib.load(...)` desde cualquier notebook o script, siempre que el
+> paquete `predict_future_sales` esté instalado (`pip install -e .`), porque el pipeline usa sus
+> transformadores.
 
 ---
 
@@ -145,9 +241,15 @@ python -m ipykernel install --user --name predict-future-sales --display-name "P
 
 # 4. Colocar los CSV de Kaggle en data/raw/ (ver sección "Datos")
 
-# 5. Abrir el notebook (en VSCode: seleccionar el kernel "Python (predict-future-sales)")
-jupyter lab notebooks/01_exploratory_data_analysis.ipynb
+# 5. Abrir los notebooks (en VSCode: seleccionar el kernel "Python (predict-future-sales)")
+jupyter lab notebooks/
 ```
+
+Orden de ejecución: `01` genera `data/processed/monthly_shop_item.csv`, que usan los notebooks
+`02` a `05`; `03` genera el pipeline de preprocesamiento que usa `04`, y `04` genera el pipeline
+completo que usa `05`. Tiempos aproximados en una laptop de 16 GB de RAM: `02` ≈ 12 min,
+`03` ≈ 2 min, `04` ≈ 25 min (15 modelos sobre 9.3 millones de filas), `05` ≈ 1 min. El grid mensual
+ocupa varios GB en memoria: se recomiendan **16 GB de RAM**.
 
 Para ejecutar el notebook completo desde la terminal (≈2 minutos; deja los outputs guardados en el
 mismo archivo y regenera las figuras de `reports/figures/` y los datasets de `data/interim/` y
@@ -160,7 +262,14 @@ jupyter nbconvert --to notebook --execute --inplace notebooks/01_exploratory_dat
 Para generar solo el dataset de ventas limpio, sin ejecutar el notebook:
 
 ```bash
-python -m predict_future_sales.dataset        # -> data/interim/sales_clean.csv
+python -m predict_future_sales.dataset           # -> data/interim/sales_clean.csv
+```
+
+Scripts del Proyecto #2 (equivalentes a la sección 5 del notebook 04 y al notebook 05):
+
+```bash
+python -m predict_future_sales.modeling.train    # re-entrena models/full_pipeline.pkl (meses 0-33)
+python -m predict_future_sales.modeling.predict  # -> data/processed/submission.csv
 ```
 
 También se incluye `requirements.txt` con las versiones exactas instaladas (`pip freeze`) para
@@ -178,6 +287,9 @@ Comandos útiles del `Makefile` (en Windows requieren `make`, p. ej. vía Git Ba
 | `make requirements` | Actualiza el entorno con `environment.yml` |
 | `make data` | Genera `data/interim/sales_clean.csv` desde `data/raw/` |
 | `make eda` | Ejecuta el notebook de EDA de punta a punta |
+| `make pipeline` | Ejecuta los notebooks 02 a 05 en orden (Proyecto #2) |
+| `make train` | Re-entrena el pipeline completo con el modelo ganador |
+| `make predict` | Genera `data/processed/submission.csv` |
 | `make lint` / `make format` | Revisa / formatea el código con `ruff` |
 | `make clean` | Borra archivos `*.pyc` y `__pycache__` |
 
@@ -196,41 +308,59 @@ Estructura generada con la plantilla **Cookiecutter Data Science v2** (`ccds`):
 ├── data
 │   ├── external           <- Datos de terceros (no usado por ahora)
 │   ├── interim            <- sales_clean_enriched.csv: ventas limpias + catálogos (generado)
-│   ├── processed          <- monthly_shop_item.csv: objetivo mensual por par (generado)
+│   ├── processed          <- monthly_shop_item.csv (generado) y submission.csv (predicciones, versionado)
 │   └── raw                <- CSV originales de Kaggle (inmutables, no versionados)
 ├── docs                   <- Documentación adicional
-├── models                 <- Modelos serializados (etapas futuras)
+├── models
+│   ├── preprocessing_pipeline.pkl   <- Pipeline de ingeniería de características (Proyecto #2)
+│   └── full_pipeline.pkl            <- Preprocesamiento + modelo ganador (Proyecto #2)
 ├── notebooks
-│   └── 01_exploratory_data_analysis.ipynb   <- EDA (entregable principal)
+│   ├── 01_exploratory_data_analysis.ipynb   <- Proyecto #1: EDA
+│   ├── 02_feature_exploration.ipynb         <- Proyecto #2: selección de lags y transformaciones
+│   ├── 03_feature_creation.ipynb            <- Proyecto #2: pipeline de preprocesamiento (.pkl)
+│   ├── 04_model_training_n_tunning.ipynb    <- Proyecto #2: torneo de 15 modelos (.pkl completo)
+│   └── 05_inference_calculation.ipynb       <- Proyecto #2: predicciones sobre test.csv (.csv)
 ├── references
 │   └── diccionario_datos.md   <- Columnas, objetivo y traducción de las 84 categorías y 60 tiendas
 ├── reports
-│   ├── figures            <- 27 gráficas generadas por el notebook
+│   ├── figures            <- Gráficas de los notebooks (prefijo p2_ = Proyecto #2)
+│   ├── model_tournament_results.csv   <- Resultados de los 15 modelos
+│   ├── best_model.json    <- Modelo ganador e hiperparámetros
 │   └── pull_screenshots   <- Screenshots del `git pull` de cada integrante
 └── predict_future_sales   <- Paquete Python del proyecto (instalado con `pip install -e .`)
     ├── __init__.py
     ├── config.py          <- Rutas del proyecto (RAW_DATA_DIR, PROCESSED_DATA_DIR, FIGURES_DIR, ...)
     ├── dataset.py         <- Carga, traducción de catálogos y limpieza (`clean_sales`) + CLI
-    ├── features.py        <- Construcción de variables (etapas futuras)
+    ├── features.py        <- Grid mensual, SalesHistoryFeatures, Mapper y listas de variables
     ├── plots.py           <- Estilo, guardado de figuras, ACF/PACF y etiquetas en español
     └── modeling
         ├── __init__.py
-        ├── predict.py     <- Inferencia (etapas futuras)
-        └── train.py       <- Entrenamiento (etapas futuras)
+        ├── predict.py     <- Inferencia sobre test.csv (CLI)
+        └── train.py       <- Re-entrenamiento del pipeline completo (CLI)
 ```
 
-> El nombre del notebook (`01_exploratory_data_analysis.ipynb`) sigue lo que pide el enunciado,
-> en lugar de la convención por defecto de CCDS (`1.0-<iniciales>-<descripcion>`).
+> Los nombres de los notebooks siguen lo que piden los enunciados, en lugar de la convención por
+> defecto de CCDS (`1.0-<iniciales>-<descripcion>`).
 
 ---
 
 ## Entregables
 
-1. Enlace a este repositorio de GitHub con la estructura de Cookiecutter:
-   <https://github.com/cesargp45/predict-future-sales>
+Repositorio: <https://github.com/cesargp45/predict-future-sales>
+
+**Proyecto #1 – EDA**
+
+1. Repositorio de GitHub con la estructura de Cookiecutter.
 2. Notebook `notebooks/01_exploratory_data_analysis.ipynb` ejecutado, con gráficas e
    interpretaciones escritas.
 3. Screenshots del `git pull` de cada integrante del equipo (en `reports/pull_screenshots/`).
+
+**Proyecto #2 – Pipeline de Machine Learning**
+
+1. Repositorio actualizado con los notebooks `02` a `05` ejecutados, con sus explicaciones escritas.
+2. Pipeline de ingeniería de características: [`models/preprocessing_pipeline.pkl`](models/preprocessing_pipeline.pkl).
+3. Pipeline completo (preprocesamiento + modelo ganador): [`models/full_pipeline.pkl`](models/full_pipeline.pkl).
+4. Predicciones sobre el dataset de testing: [`data/processed/submission.csv`](data/processed/submission.csv).
 
 ## Equipo
 

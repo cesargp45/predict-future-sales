@@ -4,10 +4,15 @@
 /data/processed/*
 /data/external/*
 !/data/**/.gitkeep
+# Entregable del Proyecto #2: predicciones sobre test.csv (formato Kaggle)
+!/data/processed/submission.csv
 
 # Modelos serializados (estado generado)
 /models/*
 !/models/.gitkeep
+# Entregables del Proyecto #2: pipelines serializados
+!/models/preprocessing_pipeline.pkl
+!/models/full_pipeline.pkl
 
 # Logs
 *.log

@@ -1,0 +1,29 @@
+{
+  "modelo": "Random Forest #2",
+  "familia": "Random Forest",
+  "clase": "RandomForestRegressor",
+  "hiperparametros": {
+    "bootstrap": true,
+    "ccp_alpha": 0.0,
+    "criterion": "squared_error",
+    "max_depth": 14,
+    "max_features": 0.5,
+    "max_leaf_nodes": null,
+    "max_samples": 0.1,
+    "min_impurity_decrease": 0.0,
+    "min_samples_leaf": 20,
+    "min_samples_split": 2,
+    "min_weight_fraction_leaf": 0.0,
+    "monotonic_cst": null,
+    "n_estimators": 50,
+    "n_jobs": -1,
+    "oob_score": false,
+    "random_state": 42,
+    "verbose": 0,
+    "warm_start": false
+  },
+  "rmse_validacion": 0.8096,
+  "rmse_entrenamiento": 0.8889,
+  "rmse_ingenuo_lag1": 1.0373,
+  "entrenamiento_final": "meses 0-33"
+}

@@ -21,5 +21,8 @@ dependencies:
   - nbconvert
   - ruff
   - pip:
+    - feature-engine
+    - lightgbm
+    - xgboost
     - python-dotenv
     - -e .

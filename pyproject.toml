@@ -5,7 +5,7 @@ build-backend = "flit_core.buildapi"
 [project]
 name = "predict_future_sales"
 version = "0.0.1"
-description = "EDA del dataset Predict Future Sales (Kaggle, 1C Company) como preparaci\u00f3n para forecasting de ventas mensuales."
+description = "EDA y pipeline de Machine Learning (feature engineering, torneo de modelos e inferencia) para el forecasting mensual de Predict Future Sales (Kaggle, 1C Company)."
 authors = [
   { name = "Equipo Proyecto 1" },
 ]

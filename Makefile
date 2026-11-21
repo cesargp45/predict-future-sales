@@ -69,6 +69,27 @@ eda:
 	jupyter nbconvert --to notebook --execute --inplace --ExecutePreprocessor.timeout=1800 notebooks/01_exploratory_data_analysis.ipynb
 
 
+## Proyecto #2: ejecuta los notebooks 02 a 05 en orden (pipelines .pkl + submission.csv)
+.PHONY: pipeline
+pipeline:
+	jupyter nbconvert --to notebook --execute --inplace --ExecutePreprocessor.timeout=10800 notebooks/02_feature_exploration.ipynb
+	jupyter nbconvert --to notebook --execute --inplace --ExecutePreprocessor.timeout=10800 notebooks/03_feature_creation.ipynb
+	jupyter nbconvert --to notebook --execute --inplace --ExecutePreprocessor.timeout=10800 notebooks/04_model_training_n_tunning.ipynb
+	jupyter nbconvert --to notebook --execute --inplace --ExecutePreprocessor.timeout=10800 notebooks/05_inference_calculation.ipynb
+
+
+## Re-entrena el pipeline completo (preprocesamiento + modelo ganador) con los meses 0-33
+.PHONY: train
+train:
+	$(PYTHON_INTERPRETER) -m predict_future_sales.modeling.train
+
+
+## Genera data/processed/submission.csv con models/full_pipeline.pkl
+.PHONY: predict
+predict:
+	$(PYTHON_INTERPRETER) -m predict_future_sales.modeling.predict
+
+
 #################################################################################
 # Self Documenting Commands                                                     #
 #################################################################################
